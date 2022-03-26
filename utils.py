@@ -19,16 +19,28 @@ from models import Neural_Network
 
 criterion = nn.MSELoss()
 
-def get_samples_in_good_format(wave, num_samples=10):
+# set GPU or CPU depending on available hardware
+# help from: https://stackoverflow.com/questions/46704352/porting-pytorch-code-from-cpu-to-gpu
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+print(f"Available device: {device}")
+
+if device == "cuda:0": 
+  # set default so all tensors are on GPU, if available
+  # help from: https://stackoverflow.com/questions/46704352/porting-pytorch-code-from-cpu-to-gpu
+  torch.set_default_tensor_type('torch.cuda.FloatTensor')
+
+def get_samples_in_good_format(wave, num_samples=10, with_noise=False, noise_dev=1):
     #This function is used to sample data from a wave
-    sample_data = wave.get_samples(num_samples=num_samples)
+    sample_data = wave.get_samples(num_samples=num_samples,with_noise=with_noise, noise_dev=noise_dev)
     x = sample_data["input"]
     y_true = sample_data["output"]
     # We add [:,None] to get the right dimensions to pass to the model: we want K x 1 (we have scalars inputs hence the x 1)
     # Note that we convert everything torch tensors
     x = torch.tensor(x[:,None])
     y_true = torch.tensor(y_true[:,None])
-    return x,y_true
+    # set to whatever the base device is (GPU or CPU)
+    # help from: https://stackoverflow.com/questions/46704352/porting-pytorch-code-from-cpu-to-gpu
+    return x.to(device),y_true.to(device) 
 
 
 def copy_existing_model(model):
@@ -162,6 +174,6 @@ def task_specific_train_and_eval(model, T_i, inner_loop_optimizer,K = 10, N=1, e
             
             per_step_loss.append(task_specifc_loss.item())
             
-        held_out_task_specific_loss = evaluation(fmodel, T_i, num_samples=num_samples)
+        held_out_task_specific_loss = evaluation(fmodel, T_i, num_samples=K)
         
         return held_out_task_specific_loss, per_step_loss, fmodel, task_info

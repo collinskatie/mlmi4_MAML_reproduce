@@ -7,6 +7,7 @@ Largely drawn from original MAML and Reptile papers
 
 from math import pi as PI
 
+# using parameters from original MAML Section 5.1 (https://arxiv.org/pdf/1703.03400.pdf)
 amp_min=0.1
 amp_max=5.0
 phase_min=0
@@ -18,3 +19,7 @@ printing_step = 500 # print loss every x epochs
 
 lr_task_specific = 0.01 # task specific learning rate
 lr_meta = 0.01 # meta-update learning rate
+
+T = 25 # num tasks per batch for MAML
+
+val_batch_size = 25 # number of val waves per epoch

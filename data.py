@@ -46,7 +46,6 @@ class Domain():
     def get_meta_test_batch(self, task_batch_size):
         # yields meta-test tasks (each just has a single data set)
         pass
-    
 '''
 Regression task, as per MAML Section 5.1 (https://arxiv.org/pdf/1703.03400.pdf)
 Specifically, sine wave generation 
@@ -118,26 +117,37 @@ class SineFunction():
         self.amplitude = amplitude
         self.phase = phase
         
-    def draw_sample(self, x): 
+    def draw_sample(self, x, with_noise=False, noise_dev=1): 
         '''
         Sample from the specified sine wave 
         '''
         # help to sample from a sine function:
         # https://stackoverflow.com/questions/48043004/how-do-i-generate-a-sine-wave-using-python
         freq = 1 # TODO: check???
-        return self.amplitude * np.sin(freq * x + self.phase)
+        sample = self.amplitude * np.sin(freq * x + self.phase)
+        
+        if with_noise: 
+            # corrupt sample w/ Gaussian noise
+            # help from: https://stackoverflow.com/questions/14058340/adding-noise-to-a-signal-in-python
+            noise_corruption = np.random.normal(0, noise_dev)
+            print("noise: ", noise_corruption, " noise_dev: ", noise_dev)
+            sample += np.random.normal(0, noise_dev) # zero-mean
+        
+        return sample
     
     def get_samples(self, num_samples=10, 
-                    min_query_x=-5.0, max_query_x=5.0): 
+                    min_query_x=-5.0, max_query_x=5.0,
+                   with_noise=False,noise_dev=1): 
         '''
         Return samples drawn from this specific function (e.g., K for training set in meta-train)
         Note, input range uses values from paper (Section 5.1)
         But modification allowed thru function so we can test generalization beyond??
         '''
         x_vals = [random.uniform(min_query_x, max_query_x) for _ in range(num_samples)]
-        y_vals = [self.draw_sample(x) for x in x_vals]
+        y_vals = [self.draw_sample(x,with_noise=with_noise,noise_dev=noise_dev) for x in x_vals]
         # conversion to tensor idea and code help from: https://github.com/AdrienLE/ANIML/blob/master/ANIML.ipynb
         return {"input": torch.Tensor(x_vals), "output": torch.Tensor(y_vals)}
+        
 
 class SineWaveTask_multi:
     '''

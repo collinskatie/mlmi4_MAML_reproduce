@@ -67,6 +67,11 @@ def k_shot_evaluation(model, dataset, num_k_shots=10, K=10, num_eval=100,
     ax.set_title("Sine Wave Regression: k-Shot Evaluation",fontsize=title_size)
     ax.legend()#loc="upper right")
     plt.savefig(f"{results_dir}k_shot_{file_tag}.png",dpi=400, bbox_inches="tight")
+
+    analysis_steps = [0, 1, num_k_shots-1]
+    for analysis_step in analysis_steps: 
+        print(f"Step: {analysis_step}, Error: {mean_loss[analysis_step]}, Var: {ci[analysis_step]}")
+
     return all_losses
 
 def plot_training_dynamics(metaLosses,metaValLosses, file_tag="maml"): 
