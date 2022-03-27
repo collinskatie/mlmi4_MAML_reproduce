@@ -50,3 +50,31 @@ class Neural_Network_Magnitude_Scaling(nn.Module):
         x = self.modulation_layer(x)
         y = x
         return y
+
+
+'''
+Predict mean and variance 
+'''
+class Prob_Neural_Network(nn.Module):
+    def __init__(self, input_size=1, hidden_size=40):
+        super(Prob_Neural_Network, self).__init__()
+        # network layers
+        self.hidden1 = nn.Linear(input_size,hidden_size)
+        self.hidden2 = nn.Linear(hidden_size,hidden_size)
+        self.mean_layer = nn.Linear(hidden_size,1) # predict mean
+        self.stdev_layer = nn.Linear(hidden_size,1) # predict stdev
+
+        #Activation functions
+        self.relu = nn.ReLU()
+        
+    def forward(self, x):
+        x = self.hidden1(x)
+        x = self.relu(x)
+        x = self.hidden2(x)
+        x = self.relu(x)
+        mu = self.mean_layer(x)
+        sigma = self.stdev_layer(x)
+        sigma = self.relu(sigma) # ensure >= 0
+        # form a Gaussian from the output
+        # help from tutor
+        return mu, sigma

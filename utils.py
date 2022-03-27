@@ -17,8 +17,6 @@ import warnings
 from data import *
 from models import Neural_Network
 
-criterion = nn.MSELoss()
-
 # set GPU or CPU depending on available hardware
 # help from: https://stackoverflow.com/questions/46704352/porting-pytorch-code-from-cpu-to-gpu
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -29,9 +27,10 @@ if device == "cuda:0":
   # help from: https://stackoverflow.com/questions/46704352/porting-pytorch-code-from-cpu-to-gpu
   torch.set_default_tensor_type('torch.cuda.FloatTensor')
 
-def get_samples_in_good_format(wave, num_samples=10, with_noise=False, noise_dev=1):
+def get_samples_in_good_format(wave, num_samples=10, with_noise=False, noise_dev=1, input_range=[-5.0, 5.0]):
     #This function is used to sample data from a wave
-    sample_data = wave.get_samples(num_samples=num_samples,with_noise=with_noise, noise_dev=noise_dev)
+    sample_data = wave.get_samples(num_samples=num_samples,with_noise=with_noise, noise_dev=noise_dev,
+                        min_query_x=input_range[0], max_query_x=input_range[1])
     x = sample_data["input"]
     y_true = sample_data["output"]
     # We add [:,None] to get the right dimensions to pass to the model: we want K x 1 (we have scalars inputs hence the x 1)
@@ -51,7 +50,7 @@ def copy_existing_model(model):
     new_model.load_state_dict(model.state_dict())
     return new_model
 
-def training_reptile(model, wave, lr_k, k):
+def training_reptile(model, wave, criterion, lr_k, k):
     # Create new model which we will train on
     new_model = copy_existing_model(model)
     # Define new optimizer
@@ -61,7 +60,7 @@ def training_reptile(model, wave, lr_k, k):
         # Reset optimizer
         koptimizer.zero_grad()
         # Evaluate the model
-        loss = evaluation(new_model, wave)
+        loss = evaluation(new_model, wave,criterion)
         # Backpropagate
         loss.backward()
         koptimizer.step()
@@ -74,16 +73,16 @@ def metaupdate(model,new_model,metaoptimizer):
   # Use those gradients in the optimizer
   metaoptimizer_update(metaoptimizer)
 
-def test_set_validation(model,new_model,wave,lr_inner,k):
+def test_set_validation(model,new_model,wave,criterion,lr_inner,k):
     # This functions does not actually affect the main algorithm, it is just used to evaluate the new model
-    new_model, oldLoss = training_reptile(model, wave, lr_inner, k)
+    new_model, oldLoss = training_reptile(model, wave, criterion, lr_inner, k)
     # Obtain the loss
-    loss = evaluation(new_model, wave)
+    loss = evaluation(new_model, wave, criterion)
     # Store loss
     return loss
 
 
-def evaluation(new_model, wave, num_samples=10):
+def evaluation(new_model, wave, criterion, num_samples=1):
     # Get data
     x, label = get_samples_in_good_format(wave,num_samples=num_samples)
     # Make model prediction
@@ -126,15 +125,15 @@ Note, different ways to refer to the task-specific vs. meta/aggregate updates to
 Sometimes called "inner" and "outer" loop, respectively
 Here, refered to as "task_specific" and "agg"/meta" (the latter, for consistency w/ ocariz code)
 '''
-def task_specific_train_and_eval(model, T_i, inner_loop_optimizer,K = 10, N=1, extract_task_info=False,
-                                with_noise=False, noise_dev=1):
+def task_specific_train_and_eval(model, T_i, inner_loop_optimizer, criterion, K = 10, N=1, extract_task_info=False,
+                                with_noise=False, noise_dev=1 ,input_range=[-5.0,5.0]):
     
     '''
     if extract_task_info is True => return information on the initial task, and intermediate preds
     don't save for storage and compute reasons if set to False (by default)
     '''
     
-    x, label = get_samples_in_good_format(T_i,num_samples=K,with_noise=with_noise, noise_dev=noise_dev)
+    x, label = get_samples_in_good_format(T_i,num_samples=K,with_noise=with_noise, noise_dev=noise_dev, input_range=input_range)
 
     task_info = {}
     
@@ -146,7 +145,7 @@ def task_specific_train_and_eval(model, T_i, inner_loop_optimizer,K = 10, N=1, e
         task_info["gt"] = true_vals
         
         # generate more points for a fine-grained evaluation of underlying func
-        eval_x, eval_true_y = get_samples_in_good_format(T_i,num_samples=10000)
+        eval_x, eval_true_y = get_samples_in_good_format(T_i,num_samples=10000, input_range=input_range)
         
         eval_coords = eval_x.detach().numpy()[:,0]
         task_info["eval_coords"] = eval_coords
@@ -174,6 +173,6 @@ def task_specific_train_and_eval(model, T_i, inner_loop_optimizer,K = 10, N=1, e
             
             per_step_loss.append(task_specifc_loss.item())
             
-        held_out_task_specific_loss = evaluation(fmodel, T_i, num_samples=K)
+        held_out_task_specific_loss = evaluation(fmodel, T_i, criterion, num_samples=K)
         
         return held_out_task_specific_loss, per_step_loss, fmodel, task_info

@@ -24,22 +24,26 @@ import pickle
 ax_size = 14
 title_size = 16
 
+dpi=800
+
 results_dir = "./report_plots/"
 backup_dir = "./backup_data/"
 
-def k_shot_evaluation(model, dataset, num_k_shots=10, K=10, num_eval=100,
-                        file_tag="maml"): 
-    all_losses = []
-    num_eval = 100 
-    num_k_shots = 10
+def k_shot_evaluation(model, dataset, criterion, num_k_shots=10, K=10, num_eval=100,
+                        file_tag="maml", seed=11, analysis_steps=[0,1,5], input_range=[-5.0,5.0]): 
 
+    torch.manual_seed(seed)
+    random.seed(seed)
+    np.random.seed(seed)
+
+    all_losses = []
     test_waves = dataset.get_meta_test_batch(task_batch_size=num_eval)
     for test_eval in range(num_eval): 
         test_wave = test_waves[test_eval]
 
         # use model returned from earlier optimization
         inner_loop_optimizer = torch.optim.SGD(model.parameters(), lr = lr_task_specific)
-        held_out_task_specific_loss, metaTrainLosses, _, _ = task_specific_train_and_eval(model, test_wave, inner_loop_optimizer, K=K, N=num_k_shots)
+        held_out_task_specific_loss, metaTrainLosses, _, _ = task_specific_train_and_eval(model, test_wave, inner_loop_optimizer, criterion, K=K, N=num_k_shots ,input_range=input_range)
 
         all_losses.append(np.array(metaTrainLosses))
 
@@ -65,10 +69,10 @@ def k_shot_evaluation(model, dataset, num_k_shots=10, K=10, num_eval=100,
     ax.set_xlabel("Gradient Steps",fontsize=ax_size)
     ax.set_ylabel("Mean Squared Error (MSE)",fontsize=ax_size)
     ax.set_title("Sine Wave Regression: k-Shot Evaluation",fontsize=title_size)
-    ax.legend()#loc="upper right")
-    plt.savefig(f"{results_dir}k_shot_{file_tag}.png",dpi=400, bbox_inches="tight")
+    ax.legend(fontsize=15)#loc="upper right")
+    plt.savefig(f"{results_dir}k_shot_{file_tag}.pdf",dpi=600, bbox_inches="tight")
 
-    analysis_steps = [0, 1, num_k_shots-1]
+    # analysis_steps = [0, 1, 5, num_k_shots-1]
     for analysis_step in analysis_steps: 
         print(f"Step: {analysis_step}, Error: {mean_loss[analysis_step]}, Var: {ci[analysis_step]}")
 
@@ -98,11 +102,12 @@ def plot_training_dynamics(metaLosses,metaValLosses, file_tag="maml"):
     plt.plot(avgVal) 
     plt.plot(avgTrain) 
     plt.legend(['Validation Loss','Train Loss'])
-    plt.savefig(f"{results_dir}training_dynamics_{file_tag}.png",dpi=400, bbox_inches="tight")
+    plt.savefig(f"{results_dir}training_dynamics_{file_tag}.pdf",dpi=dpi, bbox_inches="tight")
 
 
-def compare_K_shot(model, dataset, K_vals = [5,10], num_k_shots=10, seed=11, file_tag="maml",
-                    title="MAML K-Shot Learning Comparison"):
+def compare_K_shot(model, dataset, criterion, K_vals = [5,10], num_k_shots=10, seed=11, file_tag="maml",
+                    title="MAML K-Shot Learning Comparison", plot_lims=[-5.0, 5.0], input_range=[-5.0, 5.0],
+                    legend_locs=["upper right", "upper right"]):
     '''
     Compare fitting to functions with varied K shots
     Following MAML Fig. 2 structure: https://arxiv.org/pdf/1703.03400.pdf
@@ -120,7 +125,7 @@ def compare_K_shot(model, dataset, K_vals = [5,10], num_k_shots=10, seed=11, fil
         test_wave = dataset.get_meta_test_batch(task_batch_size=1)[0]
         # use model returned from earlier optimization
         inner_loop_optimizer = torch.optim.SGD(model.parameters(), lr = lr_task_specific)
-        held_out_task_specific_loss, metaTrainLosses, _, task_info = task_specific_train_and_eval(model, test_wave, inner_loop_optimizer, K, num_k_shots, extract_task_info=True)
+        held_out_task_specific_loss, metaTrainLosses, _, task_info = task_specific_train_and_eval(model, test_wave, inner_loop_optimizer, criterion, K, num_k_shots, extract_task_info=True, input_range=input_range)
 
         # saving help from: https://stackoverflow.com/questions/19201290/how-to-save-a-dictionary-to-a-file
         with open(f'{backup_dir}{file_tag}_Kshot_{K}_plot_data.pkl', 'wb') as f:
@@ -147,6 +152,7 @@ def compare_K_shot(model, dataset, K_vals = [5,10], num_k_shots=10, seed=11, fil
         ax.set_xlabel("",fontsize=ax_size)
         ax.set_ylabel("",fontsize=ax_size)
         ax.set_title(f"K={K}",fontsize=title_size)
-        ax.legend(loc="upper right")
+        ax.set_ylim(plot_lims)
+        ax.legend(loc=legend_locs[idx],fontsize=10)
 
-    plt.savefig(f"{results_dir}Kshot_{file_tag}.png",dpi=800, bbox_inches="tight")
+    plt.savefig(f"{results_dir}Kshot_{file_tag}.pdf",dpi=dpi, bbox_inches="tight")
