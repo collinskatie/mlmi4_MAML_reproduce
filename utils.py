@@ -14,8 +14,10 @@ import random
 from higher import innerloop_ctx
 import warnings
 
+import math
+
 from data import *
-from models import Neural_Network
+from models import Neural_Network, Prob_Neural_Network
 
 # set GPU or CPU depending on available hardware
 # help from: https://stackoverflow.com/questions/46704352/porting-pytorch-code-from-cpu-to-gpu
@@ -41,30 +43,34 @@ def get_samples_in_good_format(wave, num_samples=10, with_noise=False, noise_dev
     # help from: https://stackoverflow.com/questions/46704352/porting-pytorch-code-from-cpu-to-gpu
     return x.to(device),y_true.to(device) 
 
-
 def copy_existing_model(model):
     # Function to copy an existing model
     # We initialize a new model
-    new_model = Neural_Network()
+    if model.model_tag == "baseline": 
+        new_model = Neural_Network()
+    elif model.model_tag == "prob": 
+        new_model = Prob_Neural_Network()
     # Copy the previous model's parameters into the new model
     new_model.load_state_dict(model.state_dict())
     return new_model
 
-def training_reptile(model, wave, criterion, lr_k, k):
+def training(model, wave, criterion, lr_k, k):
     # Create new model which we will train on
     new_model = copy_existing_model(model)
     # Define new optimizer
     koptimizer = torch.optim.SGD(new_model.parameters(), lr=lr_k)
     # Update the model multiple times, note that k>1 (do not confuse k with K)
+    losses = []
     for i in range(k):
         # Reset optimizer
         koptimizer.zero_grad()
         # Evaluate the model
-        loss = evaluation(new_model, wave,criterion)
+        loss = evaluation(new_model, wave, criterion, item = False)
         # Backpropagate
         loss.backward()
         koptimizer.step()
-    return new_model, loss
+        losses.append(loss.item())
+    return new_model, losses
 
 def metaupdate(model,new_model,metaoptimizer):
   # Combine the two previous functions into a single metaupdate function
@@ -73,14 +79,22 @@ def metaupdate(model,new_model,metaoptimizer):
   # Use those gradients in the optimizer
   metaoptimizer_update(metaoptimizer)
 
-def test_set_validation(model,new_model,wave,criterion,lr_inner,k):
+def train_set_evaluation(new_model,wave,criteria, store_train_loss_meta):
+    loss = evaluation(new_model, wave,criteria)
+    store_train_loss_meta.append(loss) 
+
+def test_set_validation(model,new_model,wave,criterion,lr_inner,k, store_test_loss_meta):
     # This functions does not actually affect the main algorithm, it is just used to evaluate the new model
-    new_model, oldLoss = training_reptile(model, wave, criterion, lr_inner, k)
+    new_model, losses = training(model, wave, criterion, lr_inner, k)
     # Obtain the loss
     loss = evaluation(new_model, wave, criterion)
     # Store loss
-    return loss
+    store_test_loss_meta.append(loss)
+    return losses
 
+def print_losses(epoch,store_train_loss_meta,store_test_loss_meta,printing_step=1000):
+  if epoch % printing_step == 0:
+    print(f'Epochh : {epoch}, Average Train Meta Loss : {np.mean(store_train_loss_meta)}, Average Test Meta Loss : {np.mean(store_test_loss_meta)}')
 
 def evaluation(new_model, wave, criterion, num_samples=1):
     # Get data
@@ -176,3 +190,16 @@ def task_specific_train_and_eval(model, T_i, inner_loop_optimizer, criterion, K 
         held_out_task_specific_loss = evaluation(fmodel, T_i, criterion, num_samples=K)
         
         return held_out_task_specific_loss, per_step_loss, fmodel, task_info
+
+#https://towardsdatascience.com/predicting-probability-distributions-using-neural-networks-abef7db10eac
+def loss_gaussian(pred,label):
+    # keep loss structure as suggested for custom loss: https://discuss.pytorch.org/t/custom-loss-functions/29387
+    mean, std = pred
+    # print("mean: ", mean, " std: ", std)
+    epsilon = 1e-10 #avoid division by 0
+    avoid_inf = 1e-3
+    a = 1/(torch.sqrt(2*math.pi*std**2)+epsilon )
+    b = -((label-mean)**2)/(2*std**2+epsilon )
+    loss = -torch.log(a*torch.exp(b)+avoid_inf)
+    # print("a: ", a, " b: ", " loss: ", loss)
+    return torch.mean(loss)
