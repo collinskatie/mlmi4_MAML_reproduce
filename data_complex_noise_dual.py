@@ -1,5 +1,8 @@
 '''
 Data loader for sinusoid regression
+But with complex noise distribution 
+Note, this is very similar to data.py
+Keeping in a separate file to avoid inducing any issues in other code
 '''
 
 import numpy as np
@@ -9,8 +12,6 @@ import random
 # !pip3 install higher
 import torch
 import random
-
-from constants import *
 
 #Set random seeds for reproducibility of results 
 torch.manual_seed(0)
@@ -87,8 +88,11 @@ class RegressionDomain(Domain):
         self.tasks = {}
         # note: code would be more structured b/w task type for classification
         for task_type, num_tasks in zip(["train", "val", "test"], [train_size, val_size, test_size]):
-            tasks = [SineFunction(amplitude = random.uniform(self.amp_min, self.amp_max), 
-                                     phase=random.uniform(self.phase_min, self.phase_max)) for _ in range(num_tasks)]
+            tasks = [SineFunction(amplitude1 = random.uniform(self.amp_min, self.amp_max), 
+                                     phase1=random.uniform(self.phase_min, self.phase_max),
+                                     amplitude2 = random.uniform(self.amp_min, self.amp_max), 
+                                     phase2 = random.uniform(self.phase_min, self.phase_max), 
+                                     weighting = random.uniform(0.000001, 0.99999)) for _ in range(num_tasks)]
             self.tasks[task_type] = tasks
     
     def get_batch_of_tasks(self, task_type, task_batch_size): 
@@ -112,12 +116,16 @@ class RegressionDomain(Domain):
     def get_meta_test_batch(self, task_batch_size=None): 
         return self.get_batch_of_tasks("test", task_batch_size)
 
-        
 class SineFunction(): 
     
-    def __init__(self, amplitude, phase): 
-        self.amplitude = amplitude
-        self.phase = phase
+    def __init__(self, amplitude1, phase1, amplitude2, phase2, weighting): 
+        self.amplitude1 = amplitude1
+        self.phase1 = phase1
+
+        self.amplitude2 = amplitude2 
+        self.phase2 = phase2
+
+        self.weighting = weighting
         
     def draw_sample(self, x, with_noise=False, noise_dev=1): 
         '''
@@ -125,15 +133,26 @@ class SineFunction():
         '''
         # help to sample from a sine function:
         # https://stackoverflow.com/questions/48043004/how-do-i-generate-a-sine-wave-using-python
-        freq = 1 # TODO: check???
-        sample = self.amplitude * np.sin(freq * x + self.phase)
+        freq = 1 
+        sample1 = self.amplitude1 * np.sin(freq * x + self.phase1)
+
+        sample2 = self.amplitude2 * np.sin(freq * x + self.phase2)
         
         if with_noise: 
-            # corrupt sample w/ Gaussian noise
-            # help from: https://stackoverflow.com/questions/14058340/adding-noise-to-a-signal-in-python
-            noise_corruption = np.random.normal(0, noise_dev)
-            # print("noise: ", noise_corruption, " noise_dev: ", noise_dev)
-            sample += np.random.normal(0, noise_dev) # zero-mean
+
+            # simulate more complex noise 
+            # gaussian corruption help from 
+            # https://stackoverflow.com/questions/14058340/adding-noise-to-a-signal-in-python
+
+            # assume gaussian "world" noise over entire domain 
+            noise1 =  np.random.normal(0, 0.1)
+
+            noise2 = np.random.normal(0, 0.3)
+
+            sample1 += noise1 
+            sample2 += noise2 
+
+        sample = (sample1 * self.weighting) + sample2 * (1-self.weighting)
         
         return sample
     
@@ -149,37 +168,3 @@ class SineFunction():
         y_vals = [self.draw_sample(x,with_noise=with_noise,noise_dev=noise_dev) for x in x_vals]
         # conversion to tensor idea and code help from: https://github.com/AdrienLE/ANIML/blob/master/ANIML.ipynb
         return {"input": torch.Tensor(x_vals), "output": torch.Tensor(y_vals)}
-
-
-if __name__ == "main": 
-
-    '''
-    Sample of how to use the custom-written unidimensional dataset
-    '''
-
-    # using parameters from original MAML Section 5.1 (https://arxiv.org/pdf/1703.03400.pdf)
-    amp_min=0.1
-    amp_max=5.0
-    phase_min=0
-    phase_max=PI
-    K = 10
-
-    # todo: check parameters we want
-    # specify the number of tasks to sample per meta-set
-    meta_train_size=1000
-    meta_val_size=100
-    meta_test_size=1000
-    meta_train_eval_size = 20
-
-    task_batch_size = 10  
-
-    dataset = RegressionDomain(amp_min=amp_min, amp_max=amp_max, 
-                            phase_min=phase_min, phase_max=phase_max, 
-                            train_size=meta_train_size, val_size=meta_val_size, test_size=meta_test_size)
-
-    meta_val_set = dataset.get_meta_val_batch()
-    meta_test_set = dataset.get_meta_test_batch()
-
-    meta_train_sample = dataset.get_meta_train_batch(task_batch_size=task_batch_size)
-
-    meta_train_sample[0].get_samples()
