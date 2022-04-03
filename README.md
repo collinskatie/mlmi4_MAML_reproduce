@@ -10,11 +10,12 @@ Sources of inspiration, or other codebases and/or sources from which code is pul
 Note, seeds are largely employed throughout. This is both for reproducibility and to enable us to extract representative results for discussion. As such, they are not completely random -- and can be re-run with different settings to visualize the diversity of algorithmic behavior. However, wherever possible, we endeveoured to depict typical performance. 
 
 Additional note for transparency -- shortly before the deadline, we discovered a bug in our confidence interval (95% CI) code used to generate 95% CI bands for our k-shot evaluation table results, and confidence bars in figures. To patch this error, a remediation function was employed: 
-
+```
 import numpy as np
 def reverse(x): 
   return np.sqrt(x*np.sqrt(6)/1.96)*1.96/10
-  
+ ```
+ 
 This code was able to reverse-engineer the proper confidence bars, as we used the same settings per comparison. If needed, code can be re-run in full; we used the patch at the end as we did not have time to re-train and evaluate all models -- mean performance was unchanged in this patch.
 
 
